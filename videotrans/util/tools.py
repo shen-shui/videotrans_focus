@@ -1382,3 +1382,19 @@ def format_result(source_list,target_list,target_lang="zh"):
 # 删除翻译结果的特殊字符
 def cleartext(text):
     return text.replace('"','').replace("'",'').replace('&#39;','').replace('&quot;',"").strip()
+
+def get_role_list(tts_type):
+    if tts_type=="edgeTTS":
+        if not config.edgeTTS_rolelist:
+            get_edge_rolelist()
+        return config.edgeTTS_rolelist
+    elif tts_type=='ChatTTS':
+        # 后面补上chattts的
+        # if not config.ChatTTS_voicelist:
+        #     get_ChatTTS_voicelist()
+        return config.ChatTTS_voicelist
+    elif tts_type=='azure_TTS':
+        if not config.azure_TTS_voicelist:
+            get_azure_rolelist()
+        return config.AzureTTS_rolelist
+    
