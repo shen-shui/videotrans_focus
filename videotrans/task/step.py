@@ -16,6 +16,7 @@ from videotrans.util import tools
 from videotrans.recognition import run as run_recogn
 from videotrans.translator import run as run_trans
 from videotrans.tts import run as run_tts
+from videotrans.vpr import diarization
 
 
 class Runstep():
@@ -198,15 +199,16 @@ class Runstep():
         # 允许修改字幕
         if not self.config_params['is_batch']:
             tools.set_process(config.transobj["xiugaipeiyinzimu"], "edit_subtitle", btnkey=self.init['btnkey'])
-            while config.task_countdown > 0:
-                # 其他情况，字幕处理完毕，未超时，等待1s，继续倒计时
-                time.sleep(1)
-                # 倒计时中
-                config.task_countdown -= 1
-                if config.task_countdown <= config.settings['countdown_sec']:
-                    tools.set_process(f"{config.task_countdown}{config.transobj['zidonghebingmiaohou']}",
-                                      'show_djs',
-                                      btnkey=self.init['btnkey'])
+            # 命令行模式没必要走这个倒计时
+            # while config.task_countdown > 0:
+            #     # 其他情况，字幕处理完毕，未超时，等待1s，继续倒计时
+            #     time.sleep(1)
+            #     # 倒计时中
+            #     config.task_countdown -= 1
+            #     if config.task_countdown <= config.settings['countdown_sec']:
+            #         tools.set_process(f"{config.task_countdown}{config.transobj['zidonghebingmiaohou']}",
+            #                           'show_djs',
+            #                           btnkey=self.init['btnkey'])
             # 禁止修改字幕
             tools.set_process('dubbing_start', 'timeout_djs', btnkey=self.init['btnkey'])
         tools.set_process(config.transobj['kaishipeiyin'], btnkey=self.init['btnkey'])
@@ -355,12 +357,32 @@ class Runstep():
             rate = f"{rate}%"
         # 取出设置的每行角色
         line_roles = self.config_params["line_roles"] if "line_roles" in self.config_params else None
+
+        if(self.config_params['auto_multi_role']):
+            role_list = tools.get_role_list(self.config_params['tts_type'])
+            default_role = self.config_params['voice_role']
+            if default_role == '':
+                default_role = next(iter(role_list.items()))
+            tools.set_process("正在识别说话人...", 'logs', btnkey=self.init['btnkey'])
+            speaker_result = diarization.get_speaker_result(self.init['vocal'], self.obj['output'])
+            tools.set_process("正在匹配配音角色...", 'logs', btnkey=self.init['btnkey'])
+            dr = diarization.define_line_roles(subs, speaker_result, role_list, default_role)
+
+            tools.set_process("配音角色匹配完成", 'logs', btnkey=self.init['btnkey'])
+            if(dr is not None):
+                line_roles = dr
+
+            # 把字幕数据保存下来，debug diarizatio的时候用
+            # import pickle
+            # with open('subs_data.pickle', 'wb') as handle:
+            #     pickle.dump(subs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
         # 取出每一条字幕，行号\n开始时间 --> 结束时间\n内容
         for i, it in enumerate(subs):
             # 判断是否存在单独设置的行角色，如果不存在则使用全局
             voice_role = self.config_params['voice_role']
-            if line_roles and f'{it["line"]}' in line_roles:
-                voice_role = line_roles[f'{it["line"]}']
+            if line_roles and it["line"] in line_roles:
+                voice_role = line_roles[it["line"]]
             newrole = str(voice_role).replace('/', '-').replace('\\', '/')
             filename = f'{i}-{newrole}-{self.config_params["voice_rate"]}-{self.config_params["voice_autorate"]}-{it["text"]}-{self.config_params["volume"].replace("%", "")}-{self.config_params["pitch"]}'
             md5_hash = hashlib.md5()
