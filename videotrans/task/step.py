@@ -39,7 +39,7 @@ class Runstep():
         self.precent += 3
         tools.set_process(config.transobj["kaishishibie"], btnkey=self.init['btnkey'])
         # 如果不存在视频，或存在已识别过的，或存在目标语言字幕 或合并模式，不需要识别
-        if self.config_params['app_mode'] in ['hebing', 'peiyin']:
+        if self.config_params['app_mode'] in ['hebing', 'peiyin', 'zhijietts']:
             self._unlink(self.init['shibie_audio'])
             return True
         if self._srt_vail(self.init['source_sub']):
@@ -106,7 +106,7 @@ class Runstep():
     def trans(self):
         self.precent += 3
         # 是否需要翻译，不是 hebing，存在识别后字幕并且不存在目标语言字幕，并且原语言和目标语言不同，则需要翻译
-        if self.config_params['app_mode'] in ['hebing'] or \
+        if self.config_params['app_mode'] in ['hebing', 'zhijietts'] or \
                 self.config_params['target_language'] == '-' or \
                 self.config_params['target_language'] == self.config_params[
             'source_language'] or not tools.vail_file(self.init['source_sub']):
@@ -178,6 +178,8 @@ class Runstep():
     # 配音处理
     def dubbing(self):
         self.precent += 3
+        if tools.vail_file(self.init['target_srt']):
+            shutil.copy2(self.init['target_srt'], self.init['target_sub'])
         config.task_countdown = 0 if self.config_params['app_mode'] == 'biaozhun_jd' else config.settings[
             'countdown_sec']
         if self.config_params['app_mode'] in ['tiqu']:
