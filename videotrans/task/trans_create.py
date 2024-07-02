@@ -92,6 +92,8 @@ class TransCreate():
         self.init['vocal'] = None
         # 识别音频
         self.init['shibie_audio'] = None
+        # 目标字幕文件
+        self.init['target_srt'] = self.config_params['target_srt'] if 'target_srt' in self.config_params else None
 
         # 视频信息
         '''
@@ -178,8 +180,8 @@ class TransCreate():
         if self.config_params['app_mode'] == 'peiyin':
             self.init[
                 'target_wav'] = f"{self.init['target_dir']}/{self.init['target_language_code']}-{self.init['noextname']}.m4a"
-            if self.config_params['clear_cache']:
-                Path(self.init['target_wav']).unlink(missing_ok=True)
+            # if self.config_params['clear_cache']:
+            #     Path(self.init['target_wav']).unlink(missing_ok=True)
 
         # 如果原语言和目标语言相等，并且存在配音角色，则替换配音
         if self.config_params['voice_role'] != 'No' and self.init['source_language_code'] == self.init[
