@@ -1,6 +1,6 @@
 """
 命令行使用方式
-python cli.py  [-c 可选传参一个配置文件的绝对路径，如果不传参，则使用项目根目录下的 cli.ini ] [-m mp4视频的绝对地址或填写到cli.ini文件中] [-cuda 加上即启用cuda加速，如果可用]
+python cli.py  [-c 可选传参一个配置文件的绝对路径，如果不传参，则使用项目根目录下的 cli.ini ] [-m mp4视频的绝对地址或填写到cli.ini文件中] [-cuda 加上即启用cuda加速，如果可用] [-s 目标语言字幕]
 
 python cli.py -m c:/Users/c1/Videos/1.mp4 使用 默认当前目录下的 cli.ini
 python cli.py -cuda -m c:/Users/c1/Videos/1.mp4 使用 默认当前目录下的 cli.ini，启用CUDA加速
@@ -32,7 +32,7 @@ def __init__():
         print("正在获取 elevenlabs TTS 角色...")
         get_elevenlabs_role()
 
-def process(video_path, cfg_file, enableCuda = True) :
+def process(video_path, cfg_file, enableCuda = True, target_srt=None) :
     # 先清理临时文件再跑
     tools.delete_temp()
     config.settings['countdown_sec'] = 0
@@ -64,6 +64,9 @@ def process(video_path, cfg_file, enableCuda = True) :
         config.params['back_audio']='-'
     # cuda必须准确的设置，如果没cuda环境却启用了cuda，后面会报错
     config.params['cuda'] = enableCuda
+
+    if target_srt and os.path.exists(target_srt):
+        config.params['target_srt'] = target_srt
 
     if video_path and os.path.exists(video_path):
         config.params['source_mp4'] = video_path
@@ -144,7 +147,6 @@ def process(video_path, cfg_file, enableCuda = True) :
         config.proxy = config.params['proxy'].strip()
         set_proxy(config.proxy)
     config.current_status = 'ing'
-    config.params['app_mode'] = 'cli'
     config.params['mode'] = 'cli'
     (base, ext) = os.path.splitext(config.params['source_mp4'].replace('\\', '/'))
     config.params['target_dir'] = os.path.dirname(base)
@@ -227,7 +229,8 @@ if __name__ == '__main__':
     parser.add_argument('-c', type=str, help='cli.ini file absolute filepath', default=os.path.join(os.getcwd(), 'cli.ini'))
     parser.add_argument('-m', type=str, help='mp4 absolute filepath', default="")
     parser.add_argument('-cuda', action='store_true', help='Activates the cuda option')
+    parser.add_argument('-s', type=str, help='Target language SRT filepath', default=None)
 
     args = vars(parser.parse_args())
 
-    process(args['m'], args['c'], args['cuda'])
+    process(args['m'], args['c'], args['cuda'], args['s'])
