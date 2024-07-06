@@ -131,12 +131,12 @@ class Runstep():
         if not self.config_params['is_batch']:
             # 等待编辑原字幕后翻译,允许修改字幕
             tools.set_process(config.transobj["xiugaiyuanyuyan"], 'edit_subtitle', btnkey=self.init['btnkey'])
-            while config.task_countdown > 0:
-                config.task_countdown -= 1
-                if config.task_countdown <= config.settings['countdown_sec']:
-                    tools.set_process(f"{config.task_countdown} {config.transobj['jimiaohoufanyi']}", 'show_djs',
-                                      btnkey=self.init['btnkey'])
-                time.sleep(1)
+            # while config.task_countdown > 0:
+            #     config.task_countdown -= 1
+            #     if config.task_countdown <= config.settings['countdown_sec']:
+            #         tools.set_process(f"{config.task_countdown} {config.transobj['jimiaohoufanyi']}", 'show_djs',
+            #                           btnkey=self.init['btnkey'])
+            #     time.sleep(1)
 
             # 禁止修改字幕
             tools.set_process('translate_start', 'timeout_djs', btnkey=self.init['btnkey'])

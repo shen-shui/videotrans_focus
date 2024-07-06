@@ -25,7 +25,7 @@ from videotrans.util import tools
 # 指定超参数文件路径
 hparams_path = "F:\\gitwork-chroya\\videotrans_focus\\videotrans\\vpr\\hparam.yaml"
 
-pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.0", use_auth_token='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')
+pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token='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')
 result = [{
         'start_time': 0,
         'end_time': 0,
@@ -35,7 +35,7 @@ result = [{
         'speaker_name': 'unknown'}]
 
 # 加载音频文件
-audio_file = "F:\\Project\\aigc短剧\\第一集1分钟\\第一集1分钟\\vocal.wav"
+audio_file = "F:\\Project\\test\\11\\vocal.wav"
 
 def get_speaker_result(audio_file, output_dir=os.getcwd()):
     # 运行说话人分割和识别
@@ -45,7 +45,7 @@ def get_speaker_result(audio_file, output_dir=os.getcwd()):
     MIN_DURATION_ON = 0.1
 
     # 导出为RTTM格式
-    with open(output_dir+"/speaker.rttm", "w") as f:
+    with open(get_plot_path("speaker.rttm"), "w") as f:
         for turn, _, speaker in diarization.itertracks(yield_label=True):
             record = {}
             start_time = turn.start
@@ -87,7 +87,14 @@ def get_speaker_count(speaker_result):
 def show_speaker_plot(diarization, output_dir):
     # 绘制
     fig = notebook.plot_annotation(diarization, time=True)
-    plt.savefig(output_dir+"/speaker_plot.png")
+    plt.savefig(get_plot_path("speaker_plot.png"))
+
+# 都存到plot目录中
+def get_plot_path(file_name):
+    if not os.path.exists(os.getcwd()+'/plot_debug'):
+        os.makedirs(os.getcwd()+'/plot_debug')
+    
+    return os.path.join(os.getcwd(), 'plot_debug', file_name)
 
 # 把字幕文件图形化展示
 def show_subtitle_plot(sub_list, output_dir=os.getcwd()):
@@ -115,7 +122,7 @@ def show_subtitle_plot(sub_list, output_dir=os.getcwd()):
     plt.title('Subtitle Visualization')
     plt.xlim(left=min(times), right=max(times+durations))
     # plt.show()
-    plt.savefig(output_dir+"/subtitle_plot.png")
+    plt.savefig(get_plot_path("subtitle_plot.png"))
 
 def show_line_role_plot(line_roles, output_dir=os.getcwd()):
     # 解析数据，准备绘图
@@ -152,7 +159,7 @@ def show_line_role_plot(line_roles, output_dir=os.getcwd()):
     plt.title('Linerole Visualization')
     plt.xlim(left=min(times), right=max(times+durations))
     # plt.show()
-    plt.savefig(output_dir+"/line_role_plot.png")
+    plt.savefig(get_plot_path("line_role_plot.png"))
 
 # 定义一个函数来提取基频并判断性别
 def get_gender_from_segment(audio_file, segment):
