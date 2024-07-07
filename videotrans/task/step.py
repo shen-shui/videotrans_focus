@@ -357,15 +357,18 @@ class Runstep():
         line_roles = self.config_params["line_roles"] if "line_roles" in self.config_params else None
 
         if(self.config_params['auto_multi_role']):
+            # 目前如果打开这个，需要在speaech_role_debug中跑个role_embeddings.npy出来，放到根目录。跑一次就行，后续就不用了
             role_list = tools.get_role_list(self.config_params['tts_type'])
             default_role = self.config_params['voice_role']
             if default_role == '':
                 default_role = next(iter(role_list.items()))
-            tools.set_process("正在识别说话人...", 'logs', btnkey=self.init['btnkey'])
-            speaker_result = diarization.get_speaker_result(self.init['vocal'], self.obj['output'])
-            tools.set_process("正在匹配配音角色...", 'logs', btnkey=self.init['btnkey'])
-            dr = diarization.define_line_roles(subs, speaker_result, role_list, default_role)
+            # tools.set_process("正在识别说话人...", 'logs', btnkey=self.init['btnkey'])
+            # speaker_result = diarization.get_speaker_result(self.init['vocal'], self.obj['output'])
+            # tools.set_process("正在匹配配音角色...", 'logs', btnkey=self.init['btnkey'])
+            # dr = diarization.define_line_roles(subs, speaker_result, role_list, default_role)
 
+            tools.set_process("正在匹配配音角色...", 'logs', btnkey=self.init['btnkey'])
+            dr = diarization.define_line_roles(subs, self.init['vocal'])
             tools.set_process("配音角色匹配完成", 'logs', btnkey=self.init['btnkey'])
             if(dr is not None):
                 line_roles = dr

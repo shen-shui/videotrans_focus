@@ -17,6 +17,7 @@ import torch
 
 from videotrans.configure import config
 from videotrans.util import tools
+from speech_role_debug import get_role
 
 # 指定下载目录
 # cache_dir = "F:\\huggingface_cache"
@@ -36,12 +37,13 @@ result = [{
         'duration': 0,
         'speaker_id': 0,
         'gender': 1, # 1:男，0:女
-        'speaker_name': 'unknown'}]
+        'speaker_role': ''}]
 
 def get_speaker_result(audio_file, output_dir=os.getcwd()):
     # 运行说话人分割和识别
     diarization = pipeline(audio_file)
-    speakers = set()
+    speakers = set() # 说话人识别到的
+    roles = set()  # 角色的声音相似度匹配到的
     result = []
     embeddings = []
     # 太小了，向量计算的时候，卷积核太少，会报错。如果不用计算embedding，则可以小一点
@@ -60,11 +62,13 @@ def get_speaker_result(audio_file, output_dir=os.getcwd()):
 
             segment = Segment(turn.start, turn.end)
             embedding = get_embedding(audio_file, segment)
-            embeddings.append((start_time, embedding))
-            gender = get_gender_from_segment(audio_file, segment)
+            role = get_role(embedding)
+            # embeddings.append((start_time, embedding))
+            # gender = get_gender_from_segment(audio_file, segment)
 
             end_time = start_time+ duration
             speakers.add(speaker)
+            roles.add(role)
             
             start_time_milliseconds = int(start_time * 1000)
             end_time_milliseconds = int(end_time * 1000)
@@ -72,14 +76,15 @@ def get_speaker_result(audio_file, output_dir=os.getcwd()):
             record['end_time'] = end_time_milliseconds
             record['duration'] = duration
             record['speaker_id'] = speaker
-            record['gender'] = gender
+            record['speaker_role'] = role
             result.append(record)
 
-            data = f"SPEAKER 1 {start_time:.3f} {duration:.3f} {gender} {speaker}\n"
+            data = f"SPEAKER 1 {start_time:.3f} {duration:.3f} {role} {speaker}\n"
             print(data)
             f.write(data)
     
     tools.set_process(f"识别到说话人数量：{len(speakers)}")
+    tools.set_process(f"匹配到的配音角色数量：{len(roles)}")
 
     show_speaker_plot(diarization, output_dir)
     # show_embedding_similar(embeddings)
@@ -166,6 +171,43 @@ def show_line_role_plot(line_roles, output_dir=os.getcwd()):
     plt.xlim(left=min(times), right=max(times+durations))
     # plt.show()
     plt.savefig(get_plot_path("line_role_plot.png"))
+
+def show_line_role_plot_new(line_roles, output_dir=os.getcwd()):
+    # 解析数据，准备绘图
+    times = []
+    durations = []
+    texts = []
+    colors = ['blue', 'green', 'red', 'purple', 'orange']  # 颜色列表
+    speaker_set = set()
+
+    for key in line_roles.keys():
+        if(not isinstance(key, str)):
+            continue
+        it = line_roles[key]
+        times.append(it['start_time'])  # 取开始秒数
+        durations.append(it['end_time'] - it['start_time'])
+        texts.append(it['speaker_role'])
+        speaker_set.add(it['speaker_role'])
+    
+    speaker_list = list(speaker_set)
+
+    # 绘制
+    fig, ax = plt.subplots(figsize=(10, 2))
+
+    for i, (time, duration, text) in enumerate(zip(times, durations, texts)):
+        # 在list中寻找speaker_id的位置
+        spk_index = speaker_list.index(text)
+        spk_index = spk_index if spk_index >= 0 else 0
+        ax.add_patch(mpatches.Rectangle((time, 0), duration, 1, facecolor=colors[spk_index%len(colors)]))
+        # 添加标签
+        ax.text(time + duration / 2, 0.8, text.split('_')[-1], ha='center', va='center')
+
+    ax.set_yticks([])  # 隐藏y轴刻度
+    ax.set_xlabel('Time (seconds)')
+    plt.title('Linerole Visualization')
+    plt.xlim(left=min(times), right=max(times+durations))
+    # plt.show()
+    plt.savefig(get_plot_path("line_role_plot_new.png"))
 
 # 定义一个函数来提取基频并判断性别
 def get_gender_from_segment(audio_file, segment):
@@ -293,6 +335,35 @@ def define_line_roles(sub_list, speaker_result, role_list, default_role=None):
     
     return line_roles
     
+def define_line_roles(sub_list, audio_file):
+    # 两个参数都不能为空
+    if sub_list is None:
+        return
+    
+    # line_roles定义为一个字典    
+    line_roles = {}
+    
+    tools.set_process("字幕匹配说话人")
+    for it in sub_list:
+        # 要么用当前匹配上的角色，要么用上一个匹配上的角色
+        sub_start_time,sub_end_time,line = it['start_time'], it['end_time'], it['line']
+        segment = Segment(sub_start_time/1000, sub_end_time/1000)
+        embedding = get_embedding(audio_file, segment)
+        role = get_role(embedding)
+
+        line_roles[line] = role
+
+        # 额外信息，用来showplot
+        line_role_obj = {}
+        line_role_obj['speaker_role'] = role
+        line_role_obj['start_time'] = sub_start_time
+        line_role_obj['end_time'] = sub_end_time 
+        line_roles[str(line)] = line_role_obj
+
+        tools.set_process(f"{line} {role} :{sub_start_time}->{sub_end_time}")
+    
+    return line_roles
+    
 def fit_edge_role(role_item, default_role):
     return role_item if role_item != "No" else default_role
     # return role_item[1] if role_item is not None else default_role
@@ -323,14 +394,14 @@ if __name__ == '__main__':
     # 加载音频文件
     audio_file = "F:\\Project\\test\\101\\vocal.wav"
     pickle_file = "F:\\Project\\test\\101\\subs_data.pickle"
-    sr = get_speaker_result(audio_file)
+    # sr = get_speaker_result(audio_file)
 
     with open(pickle_file, 'rb') as handle:
         subs = pickle.load(handle)
 
-    role_list = tools.get_edge_rolelist()
+    # role_list = tools.get_edge_rolelist()
 
-    line_roles = define_line_roles(subs, sr, role_list, "default")
+    line_roles = define_line_roles(subs, audio_file)
 
     show_subtitle_plot(subs)
-    show_line_role_plot(line_roles)
+    show_line_role_plot_new(line_roles)

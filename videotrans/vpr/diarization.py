@@ -1,10 +1,12 @@
 import librosa
 import numpy as np
-from pyannote.audio import Pipeline
+from pyannote.audio import Pipeline, Model, Inference
 from pyannote.core import Segment
 import random
 
 from videotrans.util import tools
+
+from scipy.spatial.distance import cosine
 
 # 指定下载目录
 # cache_dir = "F:\\huggingface_cache"
@@ -17,6 +19,8 @@ from videotrans.util import tools
 hparams_path = "F:\\gitwork-chroya\\videotrans_focus\\videotrans\\vpr\\hparam.yaml"
 
 pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.0", use_auth_token='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')
+# 加载embedding提取模型
+embedding_model = Model.from_pretrained("pyannote/embedding", use_auth_token='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')
 
 result = [{
         'start_time': 0,
@@ -46,7 +50,7 @@ def get_speaker_result(audio_file, output_dir):
                 continue
 
             segment = Segment(turn.start, turn.end)
-            gender = get_gender_from_segment(audio_file, segment)
+            # gender = get_gender_from_segment(audio_file, segment)
 
             end_time = start_time+ duration
             speakers.add(speaker)
@@ -57,10 +61,10 @@ def get_speaker_result(audio_file, output_dir):
             record['end_time'] = end_time_milliseconds
             record['duration'] = duration
             record['speaker_id'] = speaker
-            record['gender'] = gender
+            # record['gender'] = gender
             result.append(record)
 
-            f.write(f"SPEAKER 1 {start_time:.3f} {duration:.3f} {gender} {speaker}\n")
+            f.write(f"SPEAKER 1 {start_time:.3f} {duration:.3f} [NA] {speaker}\n")
     
     tools.set_process(f"识别到说话人数量：{len(speakers)}")
     
@@ -190,7 +194,63 @@ def define_line_roles(sub_list, speaker_result, role_list, default_role=None):
         #         continue
     
     return line_roles
+
+def define_line_roles(sub_list, audio_file):
+    # 两个参数都不能为空
+    if sub_list is None:
+        return
     
+    # line_roles定义为一个字典    
+    line_roles = {}
+    
+    tools.set_process("字幕匹配说话人")
+    for it in sub_list:
+        # 要么用当前匹配上的角色，要么用上一个匹配上的角色
+        sub_start_time,sub_end_time,line = it['start_time'], it['end_time'], it['line']
+        segment = Segment(sub_start_time/1000, sub_end_time/1000)
+        embedding = get_embedding(audio_file, segment)
+        role = get_role(embedding)
+
+        line_roles[line] = role
+
+        # 额外信息，用来showplot
+        line_role_obj = {}
+        line_role_obj['speaker_role'] = role
+        line_role_obj['start_time'] = sub_start_time
+        line_role_obj['end_time'] = sub_end_time 
+        line_roles[str(line)] = line_role_obj
+
+        tools.set_process(f"{line} {role} :{sub_start_time}->{sub_end_time}")
+    
+    return line_roles
+
+# 提取音频片段的embedding
+def get_embedding(audio_path, segment):
+    inference = Inference(embedding_model, window="whole")
+    embedding = inference.crop(audio_path, segment)
+
+    return embedding
+
+# 匹配一个最合适的角色
+def get_role(audio_embedding):
+    # 加载预先保存的配音角色特征值
+    saved_embeddings = np.load('role_embeddings.npy', allow_pickle=True).item()
+    role, similarity = find_most_similar_role(audio_embedding, saved_embeddings)
+
+    print(f"The most similar role is {role} with similarity {similarity[role]}")
+    return role
+
+def calculate_similarity(embedding1, embedding2):
+    return 1 - cosine(embedding1, embedding2)  # 相似度值，越接近1越相似
+
+def find_most_similar_role(new_audio_embedding, saved_embeddings):
+    similarities = {}
+    for role, embedding in saved_embeddings.items():
+        similarity = calculate_similarity(new_audio_embedding, embedding)
+        similarities[role] = similarity
+    most_similar_role = max(similarities, key=similarities.get)
+    return most_similar_role, similarities
+
 def fit_edge_role(role_item, default_role):
     return role_item if role_item != "No" else default_role
     # return role_item[1] if role_item is not None else default_role
