@@ -17,6 +17,7 @@ from videotrans.util import tools
 hparams_path = "F:\\gitwork-chroya\\videotrans_focus\\videotrans\\vpr\\hparam.yaml"
 
 pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.0", use_auth_token='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')
+
 result = [{
         'start_time': 0,
         'end_time': 0,
@@ -25,8 +26,6 @@ result = [{
         'gender': 1, # 1:男，0:女
         'speaker_name': 'unknown'}]
 
-# 加载音频文件
-audio_file = "F:\\Project\\aigc短剧\\第一集1分钟\\第一集1分钟\\vocal.wav"
 
 def get_speaker_result(audio_file, output_dir):
     # 运行说话人分割和识别
@@ -144,6 +143,7 @@ def define_line_roles(sub_list, speaker_result, role_list, default_role=None):
     
     # speaker_result列表的索引
     speaker_index = 0
+    speaker_count = len(speaker_result)
     tools.set_process("字幕匹配说话人")
     for it in sub_list:
         # 要么用当前匹配上的角色，要么用上一个匹配上的角色
@@ -155,6 +155,9 @@ def define_line_roles(sub_list, speaker_result, role_list, default_role=None):
         if(sub_end_time > speaker_end_time):
             # 需要移动索引的情况
             speaker_index += 1
+            if speaker_index >= speaker_count:
+                # 已经遍历完了所有说话人，做个保护
+                speaker_index = speaker_count - 1
         
         # 当前的字幕匹配角色
         speaker_id = speaker_result[speaker_index]['speaker_id']
@@ -192,6 +195,8 @@ def fit_edge_role(role_item, default_role):
     return role_item if role_item != "No" else default_role
     # return role_item[1] if role_item is not None else default_role
 
-if __name__ == '__main__':
-    get_speaker_result(audio_file)
-    print(pipeline)
+# if __name__ == '__main__':
+#     # 加载音频文件
+#     audio_file = "F:\\Project\\aigc短剧\\第一集1分钟\\第一集1分钟\\vocal.wav"
+#     get_speaker_result(audio_file)
+#     print(pipeline)

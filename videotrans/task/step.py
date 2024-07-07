@@ -371,9 +371,10 @@ class Runstep():
                 line_roles = dr
 
             # 把字幕数据保存下来，debug diarizatio的时候用
-            # import pickle
-            # with open('subs_data.pickle', 'wb') as handle:
-            #     pickle.dump(subs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            if(self.config_params['debug_diarization']):
+                import pickle
+                with open('plot_debug/subs_data.pickle', 'wb') as handle:
+                    pickle.dump(subs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         # 取出每一条字幕，行号\n开始时间 --> 结束时间\n内容
         for i, it in enumerate(subs):

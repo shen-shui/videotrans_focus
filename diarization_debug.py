@@ -2,15 +2,18 @@ import os
 import librosa
 import numpy as np
 
-from pyannote.audio import Pipeline
+from pyannote.audio import Pipeline, Model, Inference
 from pyannote.core import Segment
 from pyannote.core import notebook
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+from scipy.spatial.distance import cosine
 import random
 import pickle
+
+import torch
 
 from videotrans.configure import config
 from videotrans.util import tools
@@ -22,10 +25,11 @@ from videotrans.util import tools
 # config_url = "https://huggingface.co/pyannote/speaker-diarization-3.0/resolve/main/config.yaml"
 # config_path = cached_path(config_url, cache_dir=download_dir)
 
-# 指定超参数文件路径
-hparams_path = "F:\\gitwork-chroya\\videotrans_focus\\videotrans\\vpr\\hparam.yaml"
+# 加载说话人分离模型
+pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.0", use_auth_token='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')
+# 加载embedding提取模型
+embedding_model = Model.from_pretrained("pyannote/embedding", use_auth_token='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')
 
-pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token='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')
 result = [{
         'start_time': 0,
         'end_time': 0,
@@ -34,14 +38,13 @@ result = [{
         'gender': 1, # 1:男，0:女
         'speaker_name': 'unknown'}]
 
-# 加载音频文件
-audio_file = "F:\\Project\\test\\11\\vocal.wav"
-
 def get_speaker_result(audio_file, output_dir=os.getcwd()):
     # 运行说话人分割和识别
     diarization = pipeline(audio_file)
     speakers = set()
     result = []
+    embeddings = []
+    # 太小了，向量计算的时候，卷积核太少，会报错。如果不用计算embedding，则可以小一点
     MIN_DURATION_ON = 0.1
 
     # 导出为RTTM格式
@@ -56,6 +59,8 @@ def get_speaker_result(audio_file, output_dir=os.getcwd()):
                 continue
 
             segment = Segment(turn.start, turn.end)
+            embedding = get_embedding(audio_file, segment)
+            embeddings.append((start_time, embedding))
             gender = get_gender_from_segment(audio_file, segment)
 
             end_time = start_time+ duration
@@ -77,6 +82,7 @@ def get_speaker_result(audio_file, output_dir=os.getcwd()):
     tools.set_process(f"识别到说话人数量：{len(speakers)}")
 
     show_speaker_plot(diarization, output_dir)
+    # show_embedding_similar(embeddings)
     
     return result
 
@@ -291,12 +297,35 @@ def fit_edge_role(role_item, default_role):
     return role_item if role_item != "No" else default_role
     # return role_item[1] if role_item is not None else default_role
 
+# 提取音频片段的embedding
+def get_embedding(audio_path, segment):
+    inference = Inference(embedding_model, window="whole")
+    embedding = inference.crop(audio_path, segment)
+
+    return embedding
+
+# 计算余弦相似度
+def cosine_similarity(embedding1, embedding2):
+    return 1 - cosine(embedding1, embedding2)
+
+def show_embedding_similar(embeddings):
+    # 计算说话人之间的嵌入相似度并输出
+    for i in range(len(embeddings)):
+        for j in range(i + 1, len(embeddings)):
+            start_time1, embedding1 = embeddings[i]
+            start_time2, embedding2 = embeddings[j]
+            similarity = cosine_similarity(embedding1, embedding2)
+            print(f"Similarity between {start_time1} and {start_time2}: {similarity}")
+
 if __name__ == '__main__':
     config.params['detail_log'] = True
     
+    # 加载音频文件
+    audio_file = "F:\\Project\\test\\101\\vocal.wav"
+    pickle_file = "F:\\Project\\test\\101\\subs_data.pickle"
     sr = get_speaker_result(audio_file)
 
-    with open('subs_data.pickle', 'rb') as handle:
+    with open(pickle_file, 'rb') as handle:
         subs = pickle.load(handle)
 
     role_list = tools.get_edge_rolelist()

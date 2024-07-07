@@ -32,3 +32,4 @@ videotrans/translator/freechatgpt.py
 static/wavs/
 videotrans/task/源码阅读.txt
 speaker/2222.csv
+plot_debug/
