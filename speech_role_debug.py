@@ -9,7 +9,6 @@ import librosa
 
 from pyannote.audio import Pipeline, Model, Inference
 from pyannote.core import Segment
-from pyannote.audio.pipelines import VoiceActivityDetection
 
 from scipy.spatial.distance import cosine
 
@@ -23,19 +22,63 @@ if not os.path.exists(homedir):
 if not os.path.exists(wav_dir):
     os.makedirs(wav_dir, exist_ok=True)
 
-def extract_embedding(audio_file, embedding_model):
+# 取多个segment中的特征值
+def extract_embedding_from_segments(embedding_model, audio_file, segments):
+    embeddings = []
     y, sr = librosa.load(audio_file, sr=None)
-    embedding = embedding_model({"waveform": y, "sample_rate": sr})
-    return embedding
+    for segment in segments:
+        # 修正片段的结束时间，确保其不超过音频文件的实际长度
+        start = segment.start
+        end = min(segment.end, len(y) / sr)
+        if start >= end:
+            continue
+        waveform = y[int(start * sr):int(end * sr)]
+        embedding = embedding_model({"waveform": waveform, "sample_rate": sr})
+        embeddings.append(embedding)
+    return np.mean(embeddings, axis=0)  # 对所有有声片段的嵌入取平均
 
 # 提取音频片段的embedding
 def get_embedding(embedding_model, audio_path, segment):
-    inference = Inference(embedding_model, window="whole")
-    embedding = inference.crop(audio_path, segment)
+    # 先直接用whole吧，简单方便
+    inference = Inference(embedding_model, window="whole") 
+    embedding = inference.crop(audio_path, segment) 
 
+    # embedding = get_embedding_values(sliding_window_feature)
     return embedding
 
-# 提取音频的segment
+# for sliding window
+# def get_embedding_values(sliding_window_feature):
+#     if isinstance(sliding_window_feature, tuple):
+#         # 处理元组的情况
+#         return tuple(e.data for e in sliding_window_feature)
+#     else:
+#         # 处理单个 SlidingWindowFeature 的情况
+#         return sliding_window_feature.data
+
+
+# 初始化语音活动检测和嵌入模型
+vad_pipeline = Pipeline.from_pretrained("pyannote/voice-activity-detection", use_auth_token='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')
+
+# 提取音频中有声片段segment
+def extract_voiced_segments(audio_file):
+    # 使用 VAD 提取有声片段
+    vad_result = vad_pipeline(audio_file)
+
+    y, sr = librosa.load(audio_file, sr=None)
+    duration = len(y) / sr
+
+    # 修正片段的结束时间，确保其不超过音频文件的实际长度
+    voiced_segments = []
+    for segment in vad_result.get_timeline().support():
+        start = segment.start
+        end = min(segment.end, duration)
+        if start < end:
+            voiced_segments.append(Segment(start, end))
+    return voiced_segments
+    # voiced_segments = [segment for segment, _, label in vad_result.itertracks(yield_label=True) if label == 'SPEECH']
+    # return voiced_segments
+
+# 提取音频的整段segment
 def extract_audio_segment(audio_file):
     y, sr= librosa.load(audio_file, sr=None)
     duration = librosa.get_duration(y=y, sr=sr)
@@ -49,6 +92,8 @@ def save_embeddings(role_audio_files, embedding_model, save_path=embedding_path)
     for role, audio_file in role_audio_files.items():
         segment = extract_audio_segment(audio_file)
         embedding = get_embedding(embedding_model, audio_file, segment)
+        # segments = extract_voiced_segments(audio_file)
+        # embedding = extract_embedding_from_segments(embedding_model, audio_file, segments)
         embeddings[role] = embedding
     np.save(save_path, embeddings)
 
@@ -64,8 +109,8 @@ def get_role_mp3_files(dir = homedir):
 #  
 #   返回格式如下：
 #   {
-#      "NeerjaNeural": "path/to/en-IN-NeerjaNeural.wav",
-#      "MitchellNeural": "path/to/en-NZ-MitchellNeural.wav"
+#      "en-IN-NeerjaNeural": "path/to/en-IN-NeerjaNeural.wav",
+#      "en-NZ-MitchellNeural": "path/to/en-NZ-MitchellNeural.wav"
 #   }
 #  
 def get_role_wav_files():
@@ -121,16 +166,20 @@ def get_role(audio_embedding):
     return role
 
 if __name__ == '__main__':
+
+    # speak_text = 'Hello, my dear friend. I hope your every day is beautiful and enjoyable!'
+
     # role_list = tools.get_edge_rolelist()
     # for r in list(role_list['en']):
     #     if r == 'No':
     #         continue
     #     wavname = f"{homedir}/{r}.mp3"
-    #     text_to_speech(text="Hello, my dear friend. I hope your every day is beautiful and enjoyable!", role=r, language='en', filename=wavname, tts_type='edgeTTS')
+    #     text_to_speech(text=speak_text, role=r, language='en', filename=wavname, tts_type='edgeTTS')
     #     convert_to_wav(wavname, f"{homedir}/wav/{r}.wav")
         
-    fl = get_role_wav_files()
-    print(fl)
+    # fl = get_role_wav_files()
+    # print(fl)
+
     extract_embeddings(save_embeddings)
     
 
