@@ -1,6 +1,9 @@
 import os
 import subprocess
 
+import torch
+import torchaudio
+
 from videotrans.tts import text_to_speech
 from videotrans.util import tools
 from pathlib import Path
@@ -33,8 +36,23 @@ def extract_embedding_from_segments(embedding_model, audio_file, segments):
         if start >= end:
             continue
         waveform = y[int(start * sr):int(end * sr)]
-        embedding = embedding_model({"waveform": waveform, "sample_rate": sr})
-        embeddings.append(embedding)
+        
+         # 将 numpy 数组转换为 PyTorch 张量，并添加一个额外的维度，以适应模型输入
+        waveform_tensor = torch.from_numpy(waveform).float().unsqueeze(0)
+        
+        # 调整样本率，某些模型可能需要特定的采样率
+        sample_rate = sr
+        if hasattr(embedding_model, 'sample_rate') and embedding_model.sample_rate != sample_rate:
+            waveform_tensor = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=embedding_model.sample_rate)(waveform_tensor)
+            sample_rate = embedding_model.sample_rate
+        
+        # 现在可以调用模型了
+        with torch.no_grad():
+            embedding = embedding_model(waveform_tensor)
+        
+        # 假设模型输出是一个 batch 的嵌入，我们只取第一个元素
+        embeddings.append(embedding.squeeze(0).numpy())
+        
     return np.mean(embeddings, axis=0)  # 对所有有声片段的嵌入取平均
 
 # 提取音频片段的embedding
@@ -92,6 +110,7 @@ def save_embeddings(role_audio_files, embedding_model, save_path=embedding_path)
     for role, audio_file in role_audio_files.items():
         segment = extract_audio_segment(audio_file)
         embedding = get_embedding(embedding_model, audio_file, segment)
+        # 取音频中有声音的部分，计算特征值，效果待验证
         # segments = extract_voiced_segments(audio_file)
         # embedding = extract_embedding_from_segments(embedding_model, audio_file, segments)
         embeddings[role] = embedding

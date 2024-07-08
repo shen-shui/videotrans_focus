@@ -13,8 +13,6 @@ from scipy.spatial.distance import cosine
 import random
 import pickle
 
-import torch
-
 from videotrans.configure import config
 from videotrans.util import tools
 from speech_role_debug import get_role
