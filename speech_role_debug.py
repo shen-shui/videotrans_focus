@@ -76,6 +76,7 @@ def get_embedding(embedding_model, audio_path, segment):
 
 # 初始化语音活动检测和嵌入模型
 vad_pipeline = Pipeline.from_pretrained("pyannote/voice-activity-detection", use_auth_token='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')
+embedding_model = Model.from_pretrained("pyannote/embedding", use_auth_token='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')
 
 # 提取音频中有声片段segment
 def extract_voiced_segments(audio_file):
@@ -108,17 +109,14 @@ def extract_audio_segment(audio_file):
 def save_embeddings(role_audio_files, embedding_model, save_path=embedding_path):
     embeddings = {}
     for role, audio_file in role_audio_files.items():
-        segment = extract_audio_segment(audio_file)
-        embedding = get_embedding(embedding_model, audio_file, segment)
+        embedding = get_embedding_from_audio(audio_file)
         # 取音频中有声音的部分，计算特征值，效果待验证
-        # segments = extract_voiced_segments(audio_file)
-        # embedding = extract_embedding_from_segments(embedding_model, audio_file, segments)
+        # embedding = get_voiced_embedding_from_audio(audio_file)
         embeddings[role] = embedding
     np.save(save_path, embeddings)
 
 # 提取并保存配音角色的特征值
 def extract_embeddings(save_embeddings):
-    embedding_model = Model.from_pretrained("pyannote/embedding", use_auth_token='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')
     save_embeddings(get_role_wav_files(), embedding_model)
 
 def get_role_mp3_files(dir = homedir):
@@ -133,7 +131,7 @@ def get_role_mp3_files(dir = homedir):
 #   }
 #  
 def get_role_wav_files():
-    # 获取所有以.wav结尾的文件
+    # 获取所有以.wav结尾的配音文件
     wav_files = [f for f in os.listdir(wav_dir) if f.endswith('.wav')]
     
     # 创建一个字典，键是角色名称，值是文件路径
@@ -143,11 +141,6 @@ def get_role_wav_files():
         role_name = wav_file.replace('.wav', '')
         full_path = os.path.join(wav_dir, wav_file)
         
-        # 如果角色名称已经存在于字典中，就将其添加到现有列表中
-        # if role_name in role_wav_dict:
-        #     role_wav_dict[role_name].append(full_path)
-        # else:
-        #     role_wav_dict[role_name] = [full_path]
         role_wav_dict[role_name] = full_path
     
     return role_wav_dict
@@ -172,6 +165,7 @@ def find_most_similar_role(new_audio_embedding, saved_embeddings):
     for role, embedding in saved_embeddings.items():
         similarity = calculate_similarity(new_audio_embedding, embedding)
         similarities[role] = similarity
+        print(f"Similarity between {role} and new audio: {similarity}")
     most_similar_role = max(similarities, key=similarities.get)
     return most_similar_role, similarities
 
@@ -184,22 +178,68 @@ def get_role(audio_embedding):
     print(f"The most similar role is {role} with similarity {similarity[role]}")
     return role
 
+def get_embedding_from_audio(audio_file):
+    segment = extract_audio_segment(audio_file)
+    embedding = get_embedding(embedding_model, audio_file, segment)
+    return embedding
+
+def get_voiced_embedding_from_audio(audio_file):
+    segments = extract_voiced_segments(audio_file)
+    embedding = extract_embedding_from_segments(embedding_model, audio_file, segments)
+    return embedding
+
+# 从所有wav配音文件中找到跟embedding最匹配的
+def find_from_roles(embedding):
+    similarities = {}
+    audio_files = get_role_wav_files()
+    for role, audio_file in audio_files.items():
+        audio_embedding = get_embedding_from_audio(audio_file)
+        # 取音频中有声音的部分，计算特征值，效果待验证
+        # embedding = get_voiced_embedding_from_audio(audio_file)
+
+        similarity = calculate_similarity(embedding, audio_embedding)
+        similarities[role] = similarity
+        print(f"Similarity between {role} and new audio: {similarity}")
+    most_similar_role = max(similarities, key=similarities.get)
+    return most_similar_role, similarities
+
+# 俩音频的相似度值
+def get_similar(audio_file1, audio_file2):
+
+    similarity = calculate_similarity(get_embedding_from_audio(audio_file1), get_embedding_from_audio(audio_file2))    
+    
+    # similarity = calculate_similarity(get_voiced_embedding_from_audio(audio_file1), get_voiced_embedding_from_audio(audio_file2))
+    return similarity
+
+# 生成所有edge的角色配音文件，方便调试
+def make_role_audio():
+    speak_text = 'Hello, my dear friend. I hope your every day is beautiful and enjoyable!'
+    role_list = tools.get_edge_rolelist()
+    for r in list(role_list['en']):
+        if r == 'No':
+            continue
+        wavname = f"{homedir}/{r}.mp3"
+        text_to_speech(text=speak_text, role=r, language='en', filename=wavname, tts_type='edgeTTS')
+        convert_to_wav(wavname, f"{homedir}/wav/{r}.wav")
+
 if __name__ == '__main__':
 
-    # speak_text = 'Hello, my dear friend. I hope your every day is beautiful and enjoyable!'
-
-    # role_list = tools.get_edge_rolelist()
-    # for r in list(role_list['en']):
-    #     if r == 'No':
-    #         continue
-    #     wavname = f"{homedir}/{r}.mp3"
-    #     text_to_speech(text=speak_text, role=r, language='en', filename=wavname, tts_type='edgeTTS')
-    #     convert_to_wav(wavname, f"{homedir}/wav/{r}.wav")
+    # make_role_audio()
         
     # fl = get_role_wav_files()
     # print(fl)
 
-    extract_embeddings(save_embeddings)
+    # extract_embeddings(save_embeddings)
+
+    audio_file = "F:\\Project\\test\\101\\06.wav"    
+    embedding = get_voiced_embedding_from_audio(audio_file)
+    
+    role, similarity = find_from_roles(embedding)
+    print(f"The most similar role is {role} with similarity {similarity[role]}")
+
+    # similarity = get_similar(f"{homedir}/wav/en-US-AnaNeural.wav", audio_file)
+    # similarity = get_similar(f"{homedir}/wav/en-US-RogerNeural.wav", audio_file)
+    # print(similarity)
     
 
 
