@@ -1,6 +1,8 @@
 import os
+import re
 import subprocess
 
+import pandas as pd
 import torch
 import torchaudio
 
@@ -150,7 +152,7 @@ def convert_to_wav(file_path, out_path):
         'ffmpeg',
         '-i', file_path,
         '-ac', '1',  # 设置声道数为1（单声道）
-        '-ar', '44100',  # 设置采样率为44100Hz
+        '-ar', '16000',  # 设置采样率为44100Hz
         '-vn',  # 忽略视频流
         '-c:a', 'pcm_s16le',  # 设置音频编码为16位线性PCM
         out_path
@@ -213,33 +215,105 @@ def get_similar(audio_file1, audio_file2):
 
 # 生成所有edge的角色配音文件，方便调试
 def make_role_audio():
-    speak_text = 'Hello, my dear friend. I hope your every day is beautiful and enjoyable!'
+    speak_text = 'I hope your every day is beautiful and enjoyable!'
     role_list = tools.get_edge_rolelist()
     for r in list(role_list['en']):
         if r == 'No':
             continue
         wavname = f"{homedir}/{r}.mp3"
-        text_to_speech(text=speak_text, role=r, language='en', filename=wavname, tts_type='edgeTTS')
+        # text_to_speech(text=speak_text, role=r, language='en', filename=wavname, tts_type='edgeTTS')
         convert_to_wav(wavname, f"{homedir}/wav/{r}.wav")
 
-if __name__ == '__main__':
+def parse_srt_time(time_str):
+    """Convert SRT time format to seconds."""
+    h, m, s, ms = re.split('[:,]', time_str)
+    return int(h) * 3600 + int(m) * 60 + float(s) + float(ms) / 1000
 
-    # make_role_audio()
+# 从字幕文件中，提取音频片段，用于做embedding检测
+def extrace_audio_from_srt(input_wav, srt_file, output_dir):
+    with open(srt_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    if(os.path.exists(output_dir) == False):
+        os.makedirs(output_dir)
+
+    i = 0
+    while i < len(lines):
+        if lines[i].strip().isdigit(): 
+            subtitle_index = lines[i].strip()
+            subtitle_index_padded = subtitle_index.zfill(2)
+            start_time = parse_srt_time(lines[i+1].split(' --> ')[0])
+            end_time = parse_srt_time(lines[i+1].split(' --> ')[1])
+            # 按行号命名
+            output_file = f"{output_dir}/st_{subtitle_index_padded}.wav"
+
+            subprocess.run([
+                "ffmpeg",
+                "-i", input_wav,
+                "-ss", str(start_time),
+                "-to", str(end_time),
+                "-ac", "1",
+                "-ar", "16000",
+                output_file
+            ])
+        i += 2
+
+def get_debug_wav_files(wav_dir):
+    wav_files = [f for f in os.listdir(wav_dir) if f.endswith('.wav')]
+    # 创建一个字典，键是角色名称，值是文件路径
+    role_wav_dict = {}
+    for wav_file in wav_files:
+        # 角色名称是从文件名字符中提取
+        role_name = wav_file.replace('.wav', '')
+        full_path = os.path.join(wav_dir, wav_file)
         
+        role_wav_dict[role_name] = full_path
+    
+    return role_wav_dict
+
+if __name__ == '__main__':
+    # 根据字幕文件中的时间片定义，提取出16k、单声道规格的音频片段，方便做对比验证
+    input_wav = "F:\\Project\\test\\101\\vocal.wav"
+    srt_file = "F:\\Project\\test\\101\\zh-cn.srt"
+    output_dir = "F:\\Project\\test\\101\\debug"
+    extrace_audio_from_srt(input_wav, srt_file, output_dir)
+
+    # 生成edgetts所有角色的配音文件
+    # make_role_audio()
     # fl = get_role_wav_files()
     # print(fl)
 
+    # 提取所有角色配音文件的特征值，并保存
     # extract_embeddings(save_embeddings)
 
-    audio_file = "F:\\Project\\test\\101\\06.wav"    
-    embedding = get_voiced_embedding_from_audio(audio_file)
+    # 各种对比测试，验证embedding相似度
+    # audio_file = "F:\\Project\\test\\101\\debug\\subtitle_1.wav"    
+    # audio_file1 = "F:\\Project\\test\\101\\debug\\subtitle_1.wav"    
+    # embedding = get_embedding_from_audio(audio_file)
+    # embedding = get_voiced_embedding_from_audio(audio_file)
+    # print(embedding)
     
-    role, similarity = find_from_roles(embedding)
-    print(f"The most similar role is {role} with similarity {similarity[role]}")
+    # role, similarity = find_from_roles(embedding)
+    # print(f"The most similar role is {role} with similarity {similarity[role]}")
 
     # similarity = get_similar(f"{homedir}/wav/en-US-AnaNeural.wav", audio_file)
-    # similarity = get_similar(f"{homedir}/wav/en-US-RogerNeural.wav", audio_file)
+    # similarity = get_similar("F:\\Project\\test\\101\\06.wav", audio_file)
     # print(similarity)
     
-
+    # 取目录下所有wav文件，计算特征值，并依次和其他wav文件的特征值进行相似度检测
+    audio_files = get_debug_wav_files(output_dir)
+    # 创建一个字典来存储每个角色的embedding
+    embeddings = {}
+    # 遍历角色和音频文件，计算并存储embedding
+    for role, audio_file in audio_files.items():
+        embeddings[role] = get_embedding_from_audio(audio_file)
+    similarity_df = pd.DataFrame(index=audio_files.keys(), columns=audio_files.keys())
+    for role1, audio_file in audio_files.items():
+        for role2, audio_file1 in audio_files.items():
+            # if role2 == role1:
+            #     continue
+            similarity = calculate_similarity(embeddings[role1], embeddings[role2])            
+            similarity_df.at[role1, role2] = similarity
+    
+    print(similarity_df)
 
