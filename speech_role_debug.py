@@ -271,12 +271,29 @@ def get_debug_wav_files(wav_dir):
     
     return role_wav_dict
 
+from transformers import Wav2Vec2Processor, Wav2Vec2Model
+import torch
+
+processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+def get_vec_embedding(audio_file):
+    audio , _ =librosa.load(audio_file, sr=16000)
+    input_values = processor(audio, sampling_rate=16000, return_tensors="pt").input_values
+
+    with torch.no_grad():
+        output = model(input_values).last_hidden_state.mean(dim=1)
+
+        return output[0].numpy()
+    
+def get_vec_similar(audio_file1, audio_file2):
+    return 1- cosine(get_vec_embedding(audio_file1), get_vec_embedding(audio_file2))
+
 if __name__ == '__main__':
     # 根据字幕文件中的时间片定义，提取出16k、单声道规格的音频片段，方便做对比验证
-    input_wav = "F:\\Project\\test\\101\\vocal.wav"
-    srt_file = "F:\\Project\\test\\101\\zh-cn.srt"
+    # input_wav = "F:\\Project\\test\\101\\vocal.wav"
+    # srt_file = "F:\\Project\\test\\101\\zh-cn.srt"
     output_dir = "F:\\Project\\test\\101\\debug"
-    extrace_audio_from_srt(input_wav, srt_file, output_dir)
+    # extrace_audio_from_srt(input_wav, srt_file, output_dir)
 
     # 生成edgetts所有角色的配音文件
     # make_role_audio()
@@ -306,7 +323,9 @@ if __name__ == '__main__':
     embeddings = {}
     # 遍历角色和音频文件，计算并存储embedding
     for role, audio_file in audio_files.items():
-        embeddings[role] = get_embedding_from_audio(audio_file)
+        # embeddings[role] = get_embedding_from_audio(audio_file)
+        embeddings[role] = get_vec_embedding(audio_file)
+        
     similarity_df = pd.DataFrame(index=audio_files.keys(), columns=audio_files.keys())
     for role1, audio_file in audio_files.items():
         for role2, audio_file1 in audio_files.items():
