@@ -89,6 +89,15 @@ def get_embedding(embedding_model, audio_path, segment):
     # embedding = get_embedding_values(sliding_window_feature)
     return embedding
 
+def get_embedding_for_vec(audio_path, segment):
+    audio , _ =librosa.load(audio_path, sr=16000, offset= segment.start, duration=segment.duration)    
+    input_values = processor(audio, sampling_rate=16000, return_tensors="pt").input_values
+
+    with torch.no_grad():
+        output = model(input_values).last_hidden_state.mean(dim=1)
+
+        return output[0].numpy()
+
 # for sliding window
 # def get_embedding_values(sliding_window_feature):
 #     if isinstance(sliding_window_feature, tuple):
@@ -415,6 +424,7 @@ def extract_segments_from_srt(srt_file):
 
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.spatial.distance import pdist, squareform
 from sklearn.preprocessing import StandardScaler
 def cluster_segments(segments, audio_file):
     # 创建一个 Annotation 对象
@@ -426,24 +436,32 @@ def cluster_segments(segments, audio_file):
     features = []
     for segment in annotation.itersegments():
         embedding = get_embedding(embedding_model, audio_file, segment)
+        # embedding = get_embedding_for_vec(audio_file, segment)        
         features.append(embedding)
 
     # 将特征转换为numpy数组
     features = np.array(features)
 
+    # 标准化特征数据
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(features)
+
     # 使用K-means进行聚类
     n_clusters = 3  # 预期有几个说话人
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
-    labels = kmeans.fit_predict(features)
+    # kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+    # labels = kmeans.fit_predict(features)
+    # labels = kmeans.fit_predict(features_scaled)
 
-    # 标准化特征数据
-    # scaler = StandardScaler()
-    # features_scaled = scaler.fit_transform(features)
+    # 计算余弦距离矩阵
+    # cosine_distances = pdist(features_scaled, metric='cosine')
 
-    # 计算层次聚类的链接矩阵
-    # Z = linkage(features_scaled, method='ward')
+    # # 将距离矩阵转换为方阵形式
+    # cosine_distances_square = squareform(cosine_distances)
 
-    # # 绘制树状图
+    # # 计算层次聚类的链接矩阵
+    # Z = linkage(cosine_distances_square, method='ward')
+
+    # # # 绘制树状图
     # plt.figure(figsize=(10, 5))
     # dendrogram(Z)
     # plt.title('Dendrogram')
@@ -451,8 +469,8 @@ def cluster_segments(segments, audio_file):
     # plt.ylabel('Distance')
     # plt.show()
 
-    # clustering = AgglomerativeClustering(n_clusters=3)
-    # labels = clustering.fit_predict(features)
+    clustering = AgglomerativeClustering(n_clusters, affinity='cosine', linkage='average')
+    labels = clustering.fit_predict(features_scaled)
 
     # 将聚类结果添加到 Annotation 对象中
     for segment, label in zip(annotation.itersegments(), labels):
@@ -463,10 +481,11 @@ def cluster_segments(segments, audio_file):
         print(f"Segment {segment.start:.1f}s to {segment.end:.1f}s is spoken by {speaker}")
 
 if __name__ == '__main__':
+    dir_name = '301'
     ##### 根据字幕文件中的时间片定义，提取出16k、单声道规格的音频片段 #####
-    # input_wav = "F:\\Project\\test\\101\\vocal.wav"
-    # srt_file = "F:\\Project\\test\\101\\zh-cn.srt"
-    # output_dir = "F:\\Project\\test\\101\\debug"
+    # input_wav = f"F:\\Project\\test\\{dir_name}\\vocal.wav"
+    # srt_file = f"F:\\Project\\test\\{dir_name}\\zh-cn.srt"
+    # output_dir = f"F:\\Project\\test\\{dir_name}\\debug"
     # extrace_audio_from_srt(input_wav, srt_file, output_dir)
     ########################################
 
@@ -510,7 +529,7 @@ if __name__ == '__main__':
     ##########################
     
     ##### 取目录下所有wav文件，计算特征值，并依次和其他wav文件的特征值进行相似度检测 ####
-    # output_dir = "F:\\Project\\test\\101\\debug"
+    # output_dir = f"F:\\Project\\test\\{dir_name}\\debug"
     # audio_files = get_debug_wav_files(output_dir)
     # # 创建一个字典来存储每个角色的embedding
     # embeddings = {}
@@ -534,8 +553,8 @@ if __name__ == '__main__':
     ##############################################################################
 
     #################### 测试音频片段的聚类 ###################
-    srt_file = "F:\\Project\\test\\101\\zh-cn.srt"
-    audio_file = "F:\\Project\\test\\101\\vocal.wav"
+    srt_file = f"F:\\Project\\test\\{dir_name}\\zh-cn.srt"
+    audio_file = f"F:\\Project\\test\\{dir_name}\\vocal.wav"
     segments = extract_segments_from_srt(srt_file)
     cluster_segments(segments, audio_file)
     ######################################
